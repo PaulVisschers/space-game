@@ -14,7 +14,7 @@ type Store a = Map.Map (Ref a) a
 ref :: Ref a -> Store a :-> a
 ref ix = lens (Map.! ix) (\x m -> Map.insert ix x m)
 
--- * Player
+-- * Data
 data Player = Player {
   _spatial :: Spatial
   } deriving (Show, Read)
@@ -34,12 +34,14 @@ data Scene = Scene {
   _players :: Store Player
   } deriving (Show, Read)
 
+emptyScene = Scene Map.empty
+
 $(mkLabels [''Player, ''Spatial, ''Combination, ''Scene])
 
-data ClientMessage = Connect | KeyPress WalkingKey | KeyRelease WalkingKey | MouseMovement (Vector2 Int) deriving (Show, Read)
+data ClientMessage = Connect | KeyDown WalkingKey | KeyUp WalkingKey | MouseLook (Vector2 Int) deriving (Show, Read)
 data ServerMessage = FullUpdate Scene deriving (Show, Read)
 
-data WalkingKey = WalkForward | WalkBackward deriving (Show, Read)
+data WalkingKey = WalkForward | WalkBackward | WalkRight | WalkLeft | WalkUp | WalkDown deriving (Show, Read)
 
 timeDiff :: Clock.UTCTime -> Clock.UTCTime -> Double
 timeDiff x y = fromRational $ toRational $ Clock.diffUTCTime x y
