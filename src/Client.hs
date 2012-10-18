@@ -27,14 +27,6 @@ main = do
   displayCallback $= display sceneRef
   mainLoop
 
-reshape :: ReshapeCallback
-reshape s@(Size w h) = do
-  viewport $= (Position 0 0, s)
-  matrixMode $= Projection
-  loadIdentity
-  perspective 60 (fromIntegral w / fromIntegral h) 0.02 200
-  matrixMode $= Modelview 0
-
 keyboardMouse :: Chan -> KeyboardMouseCallback -- TODO: Use local state to limit number of messages
 keyboardMouse chan (Char '\ESC') Down _ _ = leaveMainLoop
 keyboardMouse chan key keyState _ _ = case Map.lookup key keyMap of

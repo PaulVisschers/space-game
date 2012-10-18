@@ -100,6 +100,14 @@ display sceneRef = do
   position (Light 0) $= Vertex4 0 0 0 1
   swapBuffers
 
+reshape :: ReshapeCallback
+reshape s@(Size w h) = do
+  viewport $= (Position 0 0, s)
+  matrixMode $= Projection
+  loadIdentity
+  perspective 60 (fromIntegral w / fromIntegral h) 0.02 200
+  matrixMode $= Modelview 0
+
 {- TODO: Update this to new records.
 playerView :: Player -> IO ()
 playerView player = glLookAt pos (pos + front) up where
