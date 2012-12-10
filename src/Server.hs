@@ -29,9 +29,9 @@ main = do
   Channel.close chan
 
 tick :: Scene -> UTCTime -> GameMonad ()
-tick scene prevStepTime = do
-  stepTime <- liftIO Clock.getCurrentTime
-  let stepSize = timeDiff stepTime prevStepTime
+tick scene previousTime = do
+  currentTime <- liftIO Clock.getCurrentTime
+  let dt = timeDiff currentTime previousTime
 
   -- DEBUG
   msgs <- Channel.receiveAll
@@ -118,10 +118,10 @@ playerOrientation mouse dir = if vy (vy rotatedY) >= 0 then fmap rotX rotatedY e
 movementFromKey :: WalkingKey -> Vector3 Double
 movementFromKey WalkLeft = vector3 1 0 0
 movementFromKey WalkRight = vector3 (-1) 0 0
-movementFromKey WalkDown = vector3 0 (-1) 0
 movementFromKey WalkUp = vector3 0 1 0
-movementFromKey WalkBackward = vector3 0 0 (-1)
+movementFromKey WalkDown = vector3 0 (-1) 0
 movementFromKey WalkForward = vector3 0 0 1
+movementFromKey WalkBackward = vector3 0 0 (-1)
 
 -- Linear Algebra
 type Angle = Double
