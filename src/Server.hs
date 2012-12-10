@@ -6,6 +6,8 @@ import Data.Foldable
 import Control.Category
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Control.Monad.Reader
 import Control.Monad
 import Data.Label
@@ -102,12 +104,12 @@ tick scene prevStepTime = do
 
   -- GL.postRedisplay Nothing
 
-playerPosition :: Map WalkingKey UTCTime -> Vector3 (Vector3 Double) -> Vector3 Double -> Vector3 Double
+playerPosition :: Set WalkingKey -> Vector3 (Vector3 Double) -> Vector3 Double -> Vector3 Double
 playerPosition keys dir pos = pos + lv where
   up = vector3 0 1 0
   right = vx dir
   front = cross right up
-  lv = rotate (vector3 right up front) (fmap (* 0.1) $ normalize $ Map.foldrWithKey (\k x y -> movementFromKey k + y) zero keys)
+  lv = rotate (vector3 right up front) (fmap (* 0.1) $ normalize $ Set.foldr (\x y -> movementFromKey x + y) zero keys)
 
 playerOrientation :: Vector2 Int -> Vector3 (Vector3 Double) -> Vector3 (Vector3 Double)
 playerOrientation mouse dir = if vy (vy rotatedY) >= 0 then fmap rotX rotatedY else fmap rotX dir where
