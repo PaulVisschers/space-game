@@ -1,16 +1,19 @@
-{-# LANGUAGE GADTs, GeneralizedNewtypeDeriving, TemplateHaskell, TypeOperators #-}
+{-# LANGUAGE GADTs, GeneralizedNewtypeDeriving, TemplateHaskell, TupleSections, TypeOperators #-}
 module Server where
 
-import Prelude hiding (id, (.), (+), (-), (*), (/), negate, zipWith, repeat, any, all, minimum, maximum)
-import Data.Foldable
+import Prelude hiding (id, (.), (+), (-), (*), (/), negate, zipWith, repeat, any, all, minimum, maximum, foldl)
+import Data.Foldable hiding (mapM_, concatMap)
 import Control.Category
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.Reader
+import Control.Monad.State (StateT, evalStateT)
+import qualified Control.Monad.State.Class as State
 import Control.Monad
 import Data.Label
+import Data.Label.PureM
 import Data.Time.Clock (UTCTime)
 import qualified Data.Time.Clock as Clock
 import Data.Function (on)
@@ -20,24 +23,41 @@ import Control.Concurrent (threadDelay)
 import Data.Vector
 import Data.Algebra
 import qualified Network.Channel.Server.Trans as Channel
+import qualified Network.Channel.Server as Test
 import Common
+import Data.Server
 
-type GameMonad a = ReaderT (Channel.Channel (Ref Player) ClientMessage ServerMessage) IO a
+type GameMonad a = StateT State (ReaderT (Channel.Channel (Key Player) ClientMessage ServerMessage) IO) a
 
 main = do
-  chan <- Channel.new 3000
-  time <- Clock.getCurrentTime
-  Channel.withChannel chan (tick (Scene Map.empty) time) 
-  Channel.close chan
+  chan <- Test.new 3000 :: IO (Test.Channel Int ClientMessage ServerMessage)
+  forever $ do
+    msgs <- Test.receiveAll chan
+    if Map.null msgs then return () else print msgs
+    
 
-tick :: Scene -> UTCTime -> GameMonad ()
-tick scene prevStepTime = do
-  stepTime <- liftIO Clock.getCurrentTime
-  let stepSize = timeDiff stepTime prevStepTime
+-- main = do
+  -- chan <- Channel.new 3000
+  -- now <- Clock.getCurrentTime
+  -- let state = State (Time now now 0) emptyScene
+  -- (Channel.withChannel chan (evalStateT (forever tick) state))
+  -- Channel.close chan
+
+tick :: GameMonad ()
+tick = do
+  -- Updating time-based values to current tick
+  now <- liftIO Clock.getCurrentTime
+  before <- gets (currentTick . time)
+  let t = Time now before (timeDiff now before)
+
+  -- Process all incoming messages
+  processMessages
+
+  return ()
 
   -- DEBUG
-  msgs <- Channel.receiveAll
-  liftIO $ if Map.null msgs then return () else print msgs
+  -- msgs <- Channel.receiveAll
+  -- liftIO $ if Map.null msgs then return () else print msgs
 
   -- Get incoming messages and generate events
 
@@ -47,11 +67,11 @@ tick scene prevStepTime = do
   
   -- Update clients
   --liftIO $ putStrLn "Updating players"
-  Channel.broadcast (FullUpdate scene)
+  -- Channel.broadcast (FullUpdate scene)
   
-  time <- liftIO Clock.getCurrentTime
-  liftIO $ threadDelay (round ((0.5 - timeDiff time stepTime) * 1000000))
-  tick scene stepTime
+  -- time <- liftIO Clock.getCurrentTime
+  -- liftIO $ threadDelay (round ((0.5 - timeDiff time stepTime) * 1000000))
+  -- tick scene stepTime
 
   -- let input = state ! Input
   -- let scene = state ! Scene
@@ -103,6 +123,28 @@ tick scene prevStepTime = do
     -- GL.leaveMainLoop
 
   -- GL.postRedisplay Nothing
+
+processMessages :: GameMonad ()
+processMessages = do
+  msgs <- messagesToList `fmap` Channel.receiveAll
+  mapM_ (uncurry processMessage) msgs
+
+processMessage :: Key Player -> ClientMessage -> GameMonad ()
+processMessage playerKey Connect = do
+  liftIO $ print "client connected"
+  key playerKey . players . scene =: newPlayer
+  sc <- gets scene
+  Channel.send playerKey (ConnectSuccess playerKey sc)
+processMessage playerKey (MouseLook v) = do
+  liftIO $ print "mouseLook"
+  angular . position . spatial . key playerKey . players . scene =. playerOrientation v
+processMessage playerKey _ = do
+  liftIO $ print "receive unknown message"
+  return ()
+
+messagesToList :: Map k [a] -> [(k, a)]
+messagesToList = concatMap (\(k, xs) -> map (k,) xs) . Map.assocs
+
 
 playerPosition :: Set WalkingKey -> Vector3 (Vector3 Double) -> Vector3 Double -> Vector3 Double
 playerPosition keys dir pos = pos + lv where

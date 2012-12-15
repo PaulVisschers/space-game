@@ -1,6 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Client where
 
+import Prelude hiding ((.), id)
+import Control.Category
+import qualified Data.Label as L
+
 import Control.Monad
 import qualified Graphics.UI.GLUT as GL
 import Graphics.UI.GLUT
@@ -11,21 +15,38 @@ import qualified Data.Vector as V
 import qualified Network.Channel.Client as Chan
 import Common as Msg
 import Common as Data
+import Data.Client
 import Graphics
 
 type Chan = Chan.Channel ServerMessage ClientMessage
 
+-- main = do
+  -- chan <- Chan.connect "localhost" 3000
+  -- forever $ return ()
+  -- forever $ Chan.send Msg.Connect chan
+
 main = do
   chan <- Chan.connect "localhost" 3000
-  sceneRef <- newIORef emptyScene
-  initial
-  reshapeCallback $= Just reshape
-  keyboardMouseCallback $= Just (keyboardMouse chan)
-  motionCallback $= Just (motion chan)
-  passiveMotionCallback $= Just (motion chan)
-  idleCallback $= Just (idle chan sceneRef)
-  displayCallback $= display sceneRef
-  mainLoop
+  Chan.send Msg.Connect chan
+  forever $ return ()
+  -- stateRef <- newIORef (State Nothing emptyScene)
+  -- initial
+  -- centerMousePointer
+  -- reshapeCallback $= Just reshape
+  -- keyboardMouseCallback $= Just (keyboardMouse chan)
+  -- motionCallback $= Just (motion chan)
+  -- passiveMotionCallback $= Just (motion chan)
+  -- idleCallback $= Just (idle chan stateRef)
+  -- displayCallback $= display stateRef
+  -- mainLoop
+  Chan.close chan
+
+centerMousePointer :: IO ()
+centerMousePointer = do
+  Size w h <- get windowSize
+  let mx = w `div` 2
+  let my = h `div` 2
+  pointerPosition $= Position mx my
 
 keyboardMouse :: Chan -> KeyboardMouseCallback -- TODO: Use local state to limit number of messages
 keyboardMouse chan (Char '\ESC') Down _ _ = leaveMainLoop
@@ -53,18 +74,21 @@ motion chan (Position x y) = do
     pointerPosition $= Position mx my
     Chan.send (Msg.MouseLook (V.vector2 (fromIntegral (x - mx)) (fromIntegral (y - my)))) chan
 
-idle :: Chan -> IORef Scene -> IdleCallback
-idle chan sceneRef = do
-  msgs <- Chan.receive chan
-  if null msgs then return () else print msgs
-
-  msgs <- Chan.receive chan
-
-  when (not $ null msgs) $ do
-    let FullUpdate scene = last msgs
-    sceneRef $= scene
-
+idle :: Chan -> IORef State -> IdleCallback
+idle chan stateRef = do
+  processMessages chan stateRef
   postRedisplay Nothing
+
+processMessages :: Chan -> IORef State -> IO ()
+processMessages chan stateRef = do
+  st <- get stateRef
+  msgs <- Chan.receive chan
+  stateRef $= foldl (flip processMessage) st msgs  
+
+processMessage :: ServerMessage -> State -> State
+processMessage (ConnectSuccess key sc) _ = State (Just key) sc
+processMessage (FullUpdate sc) st = L.set scene sc st
+  
 
 centerMouse :: IO ()
 centerMouse = do

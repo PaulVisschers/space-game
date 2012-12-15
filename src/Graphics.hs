@@ -1,12 +1,18 @@
 {-# LANGUAGE GADTs #-}
 module Graphics where
 
-import Graphics.UI.GLUT hiding (lookAt, translate, vertex, normal, color, texCoord, scale, Vector2, Vector3)
+import Prelude hiding (Num (..), Fractional (..), (.), id)
+import Control.Category
+import qualified Data.Label as L
+
+import Graphics.UI.GLUT hiding (lookAt, translate, vertex, normal, color, texCoord, scale, Vector2, Vector3, position)
 import qualified Graphics.UI.GLUT as GL
 import Foreign (newArray)
 
+import Data.Algebra
 import Data.Vector
-import Common (Scene)
+import Common
+import Data.Client
 import Data.IORef
 
 initial :: IO ()
@@ -56,48 +62,64 @@ initial = do
   
   texImage2D Nothing NoProxy 0 RGBA'(TextureSize2D 64 64) 0 (PixelData RGBA UnsignedByte textureData)
 
-display :: IORef Scene -> DisplayCallback
-display sceneRef = do
+display :: IORef State -> DisplayCallback
+display stateRef = do
   clear [ColorBuffer, DepthBuffer]
   loadIdentity
+  print "drawing"
+  state <- get stateRef
+  case L.get playerKey state of
+    Nothing -> return ()
+    Just playerKey -> do
+      print "hasPlayerKey"
+      let playerPosition = L.get (position . spatial . key playerKey . players . scene) state
+      print playerPosition
+      --setView (L.get (position . spatial) newPlayer)
+      setView playerPosition
 
-  --player <- get (scene ! Player)
-  --playerView player
-  drawAxes
-  --grid <- get (scene ! Grid)
-  --renderGrid grid
-  {-
-  -- Debug wireframe at placement location
-  --pos <- get (scene ! Player ! Position)
-  --dir <- get (scene ! Player ! Orientation)
+      drawAxes
 
-  --view <- get (scene ! Player ! ViewLocation)
-  --placement <- get (scene ! Player ! PlacementLocation)
+      let val = 2
+      renderBlock (vector3 val 0 0)
+      renderBlock (vector3 (-val) 0 0)
+      renderBlock (vector3 0 val 0)
+      renderBlock (vector3 0 (-val) 0)
+      renderBlock (vector3 0 0 val)
+      renderBlock (vector3 0 0 (-val))
+      --grid <- get (scene ! Grid)
+      --renderGrid grid
+      {-
+      -- Debug wireframe at placement location
+      --pos <- get (scene ! Player ! Position)
+      --dir <- get (scene ! Player ! Orientation)
 
-  when (isJust view) $ do
-    preservingMatrix $ do
-      uscale 0.2
-      translate (fromJust view)
-      color (vector3 1 0 0)
-      lighting $= Disabled
-      texture Texture2D $= Disabled
-      translate (vector3 0.5 0.5 0.5)
-      renderObject Wireframe (Cube 1)
-      lighting $= Enabled
-      texture Texture2D $= Enabled
-  preservingMatrix $ do
-    uscale 0.2
-    translate placement
-    color (vector3 0 1 0)
-    lighting $= Disabled
-    texture Texture2D $= Disabled
-    translate (vector3 0.5 0.5 0.5)
-    renderObject Wireframe (Cube 1)
-    lighting $= Enabled
-    texture Texture2D $= Enabled
-  -}
+      --view <- get (scene ! Player ! ViewLocation)
+      --placement <- get (scene ! Player ! PlacementLocation)
 
-  position (Light 0) $= Vertex4 0 0 0 1
+      when (isJust view) $ do
+        preservingMatrix $ do
+          uscale 0.2
+          translate (fromJust view)
+          color (vector3 1 0 0)
+          lighting $= Disabled
+          texture Texture2D $= Disabled
+          translate (vector3 0.5 0.5 0.5)
+          renderObject Wireframe (Cube 1)
+          lighting $= Enabled
+          texture Texture2D $= Enabled
+      preservingMatrix $ do
+        uscale 0.2
+        translate placement
+        color (vector3 0 1 0)
+        lighting $= Disabled
+        texture Texture2D $= Disabled
+        translate (vector3 0.5 0.5 0.5)
+        renderObject Wireframe (Cube 1)
+        lighting $= Enabled
+        texture Texture2D $= Enabled
+      -}
+
+      GL.position (Light 0) $= Vertex4 0 0 0 1
   swapBuffers
 
 reshape :: ReshapeCallback
@@ -108,13 +130,12 @@ reshape s@(Size w h) = do
   perspective 60 (fromIntegral w / fromIntegral h) 0.02 200
   matrixMode $= Modelview 0
 
-{- TODO: Update this to new records.
-playerView :: Player -> IO ()
-playerView player = glLookAt pos (pos + front) up where
-  pos = getField Position player
-  front = vz (getField Orientation player)
-  up = vy (getField Orientation player)
--}
+setView :: Combination -> IO ()
+setView comb = lookAt pos (pos + front) up where
+  pos = L.get linear comb
+  front = vz $ L.get angular comb
+  up = vy $ L.get angular comb
+
 renderBlock :: Vector3 Double -> IO ()
 renderBlock pos = preservingMatrix $ do
   uscale 0.2

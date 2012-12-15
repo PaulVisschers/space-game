@@ -12,23 +12,21 @@ import qualified Data.Time.Clock as Clock
 import Data.Vector
 import Data.Algebra
 
-newtype Ref a = Ref Int deriving (Eq, Ord, Enum, Show, Read)
+newtype Key a = Key Int deriving (Eq, Ord, Enum, Show, Read)
 
-type DataStore a = Map.Map (Ref a) a
+type DataStore a = Map.Map (Key a) a
 
-ref :: Ref a -> DataStore a :-> a
-ref ix = lens (Map.! ix) (\x m -> Map.insert ix x m)
+key :: Key a -> DataStore a :-> a
+key ix = lens (Map.! ix) (\x m -> Map.insert ix x m)
 
 data ClientMessage = Connect | KeyDown WalkingKey | KeyUp WalkingKey | MouseLook (Vector2 Int) deriving (Show, Read)
-data ServerMessage = FullUpdate Scene deriving (Show, Read)
+data ServerMessage = ConnectSuccess (Key Player) Scene | FullUpdate Scene deriving (Show, Read)
 
 data WalkingKey = WalkForward | WalkBackward | WalkRight | WalkLeft | WalkUp | WalkDown deriving (Eq, Ord, Show, Read)
 
 -- * Data
 data Player = Player {
-  _spatial :: Spatial,
-  _keysStates :: Set WalkingKey,
-  _mouseMovement :: Vector2 Int
+  _spatial :: Spatial
   } deriving (Show, Read)
 
 data Spatial = Spatial {
@@ -47,6 +45,10 @@ data Scene = Scene {
   } deriving (Show, Read)
 
 emptyScene = Scene Map.empty
+
+newPlayer = Player (Spatial startPos zeroComb zeroComb) where
+  zeroComb = Combination zero zero
+  startPos = Combination (vector3 0 0 (2)) one
 
 $(mkLabels [''Player, ''Spatial, ''Combination, ''Scene])
 
