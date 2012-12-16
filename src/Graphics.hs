@@ -66,14 +66,11 @@ display :: IORef State -> DisplayCallback
 display stateRef = do
   clear [ColorBuffer, DepthBuffer]
   loadIdentity
-  print "drawing"
   state <- get stateRef
   case L.get playerKey state of
     Nothing -> return ()
     Just playerKey -> do
-      print "hasPlayerKey"
       let playerPosition = L.get (position . spatial . key playerKey . players . scene) state
-      print playerPosition
       --setView (L.get (position . spatial) newPlayer)
       setView playerPosition
 

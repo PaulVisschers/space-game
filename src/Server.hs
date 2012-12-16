@@ -30,28 +30,43 @@ import Data.Server
 type GameMonad a = StateT State (ReaderT (Channel.Channel (Key Player) ClientMessage ServerMessage) IO) a
 
 main = do
-  chan <- Test.new 3000 :: IO (Test.Channel Int ClientMessage ServerMessage)
-  forever $ do
-    msgs <- Test.receiveAll chan
-    if Map.null msgs then return () else print msgs
-    
-
--- main = do
-  -- chan <- Channel.new 3000
-  -- now <- Clock.getCurrentTime
-  -- let state = State (Time now now 0) emptyScene
-  -- (Channel.withChannel chan (evalStateT (forever tick) state))
-  -- Channel.close chan
+  chan <- Channel.new 3000
+  now <- Clock.getCurrentTime
+  let state = newState now
+  (Channel.withChannel chan (evalStateT (forever tick) state))
+  Channel.close chan
 
 tick :: GameMonad ()
 tick = do
   -- Updating time-based values to current tick
   now <- liftIO Clock.getCurrentTime
   before <- gets (currentTick . time)
-  let t = Time now before (timeDiff now before)
+  time =: Time now before (timeDiff now before)
 
   -- Process all incoming messages
   processMessages
+
+  -- Update state from previous tick to new one
+  ins <- gets inputs
+  players . scene =. updatePlayers ins
+  inputs =. Map.map (set mouseLook zero)
+
+  -- let pls = get (players . scene) st
+  -- liftIO (print pls)
+  -- State.put (set (players . scene) pls st)
+  
+  -- pls <- gets (players . scene)
+  -- players . scene =: pls
+
+  -- ins <- gets inputs
+  -- pla <- gets (players . scene)
+  -- players . scene =: pla
+  --players . scene =. updatePlayers ins
+  -- inputs =. Map.map (const newInput)
+
+  -- Send new scene state to everyone
+  sc <- gets scene
+  Channel.broadcast (FullUpdate sc)
 
   return ()
 
@@ -130,17 +145,20 @@ processMessages = do
   mapM_ (uncurry processMessage) msgs
 
 processMessage :: Key Player -> ClientMessage -> GameMonad ()
-processMessage playerKey Connect = do
-  liftIO $ print "client connected"
-  key playerKey . players . scene =: newPlayer
-  sc <- gets scene
-  Channel.send playerKey (ConnectSuccess playerKey sc)
-processMessage playerKey (MouseLook v) = do
-  liftIO $ print "mouseLook"
-  angular . position . spatial . key playerKey . players . scene =. playerOrientation v
-processMessage playerKey _ = do
-  liftIO $ print "receive unknown message"
-  return ()
+processMessage playerKey msg = case msg of
+  Connect -> do
+    key playerKey . players . scene =: newPlayer
+    key playerKey . inputs =: newInput
+    sc <- gets scene
+    Channel.send playerKey (ConnectSuccess playerKey sc)
+  KeyDown k -> do
+    keyState . key playerKey . inputs =. Set.insert k
+  KeyUp k -> do
+    keyState . key playerKey . inputs =. Set.delete k
+  MouseLook v -> do
+    mouseLook . key playerKey . inputs =. (+ v)
+  -- _ -> do
+    -- return ()
 
 messagesToList :: Map k [a] -> [(k, a)]
 messagesToList = concatMap (\(k, xs) -> map (k,) xs) . Map.assocs
@@ -151,7 +169,7 @@ playerPosition keys dir pos = pos + lv where
   up = vector3 0 1 0
   right = vx dir
   front = cross right up
-  lv = rotate (vector3 right up front) (fmap (* 0.1) $ normalize $ Set.foldr (\x y -> movementFromKey x + y) zero keys)
+  lv = rotate (vector3 right up front) (fmap (* 0.005) $ normalize $ Set.foldr (\x y -> movementFromKey x + y) zero keys)
 
 playerOrientation :: Vector2 Int -> Vector3 (Vector3 Double) -> Vector3 (Vector3 Double)
 playerOrientation mouse dir = if vy (vy rotatedY) >= 0 then fmap rotX rotatedY else fmap rotX dir where
@@ -166,6 +184,14 @@ movementFromKey WalkDown = vector3 0 (-1) 0
 movementFromKey WalkUp = vector3 0 1 0
 movementFromKey WalkBackward = vector3 0 0 (-1)
 movementFromKey WalkForward = vector3 0 0 1
+
+updatePlayers :: Map (Key Player) Input -> DataStore Player -> DataStore Player
+updatePlayers inputs = Map.mapWithKey (\k p -> updatePlayer (inputs Map.! k) p)
+
+updatePlayer :: Input -> Player -> Player
+updatePlayer input player = set (position . spatial) (Combination lin ang) player where
+  lin = playerPosition (get keyState input) (get (angular . position . spatial) player) (get (linear . position . spatial) player)
+  ang = playerOrientation (get mouseLook input) (get (angular . position . spatial) player)
 
 -- Linear Algebra
 type Angle = Double

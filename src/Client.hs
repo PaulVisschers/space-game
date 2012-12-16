@@ -28,17 +28,16 @@ type Chan = Chan.Channel ServerMessage ClientMessage
 main = do
   chan <- Chan.connect "localhost" 3000
   Chan.send Msg.Connect chan
-  forever $ return ()
-  -- stateRef <- newIORef (State Nothing emptyScene)
-  -- initial
-  -- centerMousePointer
-  -- reshapeCallback $= Just reshape
-  -- keyboardMouseCallback $= Just (keyboardMouse chan)
-  -- motionCallback $= Just (motion chan)
-  -- passiveMotionCallback $= Just (motion chan)
-  -- idleCallback $= Just (idle chan stateRef)
-  -- displayCallback $= display stateRef
-  -- mainLoop
+  stateRef <- newIORef (State Nothing newScene)
+  initial
+  centerMousePointer
+  reshapeCallback $= Just reshape
+  keyboardMouseCallback $= Just (keyboardMouse chan)
+  motionCallback $= Just (motion chan)
+  passiveMotionCallback $= Just (motion chan)
+  idleCallback $= Just (idle chan stateRef)
+  displayCallback $= display stateRef
+  mainLoop
   Chan.close chan
 
 centerMousePointer :: IO ()

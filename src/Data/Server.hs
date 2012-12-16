@@ -1,15 +1,30 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Data.Server where
 
-import Data.Time.Clock
+import Data.Time.Clock (UTCTime)
 import Data.Label
+import Data.Map as Map (Map, empty)
+import Data.Set as Set (Set, empty)
+
+import Data.Algebra (zero)
+import Data.Vector (Vector2)
 
 import Common
 
 data State = State {
+  _inputs :: Map (Key Player) Input,
   _time :: Time,
   _scene :: Scene
   }
+
+newState now = State Map.empty (newTime now) newScene
+
+data Input = Input {
+  _keyState :: Set WalkingKey,
+  _mouseLook :: Vector2 Int
+  }
+
+newInput = Input Set.empty zero
 
 data Time = Time {
   _currentTick :: UTCTime,
@@ -17,4 +32,6 @@ data Time = Time {
   _difference :: Double -- Seconds between this and previous tick.
 }
 
-$(mkLabels [''State, ''Time])
+newTime now = Time now now 0
+
+$(mkLabels [''State, ''Input, ''Time])

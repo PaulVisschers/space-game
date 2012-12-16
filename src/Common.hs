@@ -16,7 +16,7 @@ newtype Key a = Key Int deriving (Eq, Ord, Enum, Show, Read)
 
 type DataStore a = Map.Map (Key a) a
 
-key :: Key a -> DataStore a :-> a
+key :: Key a -> Map.Map (Key a) b :-> b
 key ix = lens (Map.! ix) (\x m -> Map.insert ix x m)
 
 data ClientMessage = Connect | KeyDown WalkingKey | KeyUp WalkingKey | MouseLook (Vector2 Int) deriving (Show, Read)
@@ -44,11 +44,11 @@ data Scene = Scene {
   _players :: DataStore Player
   } deriving (Show, Read)
 
-emptyScene = Scene Map.empty
+newScene = Scene Map.empty
 
 newPlayer = Player (Spatial startPos zeroComb zeroComb) where
   zeroComb = Combination zero zero
-  startPos = Combination (vector3 0 0 (2)) one
+  startPos = Combination (vector3 0 0 (-2)) one
 
 $(mkLabels [''Player, ''Spatial, ''Combination, ''Scene])
 
