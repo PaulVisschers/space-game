@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, GeneralizedNewtypeDeriving, TemplateHaskell, TupleSections, TypeOperators #-}
+{-# LANGUAGE TupleSections #-}
 module Server where
 
 import Prelude hiding (id, (.), (+), (-), (*), (/), negate, zipWith, repeat, any, all, minimum, maximum, foldl)
@@ -22,9 +22,11 @@ import Control.Concurrent (threadDelay)
 
 import Data.Vector
 import Data.Algebra
+import Data.LinearAlgebra
 import qualified Network.Channel.Server.Trans as Channel
 import qualified Network.Channel.Server as Test
 import Common
+import Data.Body
 import Data.Server
 
 type GameMonad a = StateT State (ReaderT (Channel.Channel (Key Player) ClientMessage ServerMessage) IO) a
@@ -33,7 +35,7 @@ main = do
   chan <- Channel.new 3000
   now <- Clock.getCurrentTime
   let state = newState now
-  (Channel.withChannel chan (evalStateT (forever tick) state))
+  Channel.withChannel chan (evalStateT (forever tick) state)
   Channel.close chan
 
 tick :: GameMonad ()
@@ -50,19 +52,6 @@ tick = do
   ins <- gets inputs
   players . scene =. updatePlayers ins
   inputs =. Map.map (set mouseLook zero)
-
-  -- let pls = get (players . scene) st
-  -- liftIO (print pls)
-  -- State.put (set (players . scene) pls st)
-  
-  -- pls <- gets (players . scene)
-  -- players . scene =: pls
-
-  -- ins <- gets inputs
-  -- pla <- gets (players . scene)
-  -- players . scene =: pla
-  --players . scene =. updatePlayers ins
-  -- inputs =. Map.map (const newInput)
 
   -- Send new scene state to everyone
   sc <- gets scene
@@ -151,14 +140,9 @@ processMessage playerKey msg = case msg of
     key playerKey . inputs =: newInput
     sc <- gets scene
     Channel.send playerKey (ConnectSuccess playerKey sc)
-  KeyDown k -> do
-    keyState . key playerKey . inputs =. Set.insert k
-  KeyUp k -> do
-    keyState . key playerKey . inputs =. Set.delete k
-  MouseLook v -> do
-    mouseLook . key playerKey . inputs =. (+ v)
-  -- _ -> do
-    -- return ()
+  KeyDown k -> keyState . key playerKey . inputs =. Set.insert k
+  KeyUp k -> keyState . key playerKey . inputs =. Set.delete k
+  MouseLook v -> mouseLook . key playerKey . inputs =. (+ v)
 
 messagesToList :: Map k [a] -> [(k, a)]
 messagesToList = concatMap (\(k, xs) -> map (k,) xs) . Map.assocs
@@ -169,12 +153,12 @@ playerPosition keys dir pos = pos + lv where
   up = vector3 0 1 0
   right = vx dir
   front = cross right up
-  lv = rotate (vector3 right up front) (fmap (* 0.005) $ normalize $ Set.foldr (\x y -> movementFromKey x + y) zero keys)
+  lv = rotate (vector3 right up front) (fmap (* 0.002) $ normalize $ Set.foldr (\x y -> movementFromKey x + y) zero keys)
 
 playerOrientation :: Vector2 Int -> Vector3 (Vector3 Double) -> Vector3 (Vector3 Double)
 playerOrientation mouse dir = if vy (vy rotatedY) >= 0 then fmap rotX rotatedY else fmap rotX dir where
   rotX = rotateByAngle (fromIntegral (vx mouse) * (-0.001)) (vector3 0 1 0)
-  rotY = rotateByAngle (fromIntegral (vy mouse) * (0.001)) (vx dir)
+  rotY = rotateByAngle (fromIntegral (vy mouse) * 0.001) (vx dir)
   rotatedY = fmap rotY dir
 
 movementFromKey :: WalkingKey -> Vector3 Double
@@ -189,36 +173,9 @@ updatePlayers :: Map (Key Player) Input -> DataStore Player -> DataStore Player
 updatePlayers inputs = Map.mapWithKey (\k p -> updatePlayer (inputs Map.! k) p)
 
 updatePlayer :: Input -> Player -> Player
-updatePlayer input player = set (position . spatial) (Combination lin ang) player where
-  lin = playerPosition (get keyState input) (get (angular . position . spatial) player) (get (linear . position . spatial) player)
-  ang = playerOrientation (get mouseLook input) (get (angular . position . spatial) player)
-
--- Linear Algebra
-type Angle = Double
-
-degrees :: Angle -> Angle
-degrees x = x / pi * 180
-
-translate :: (Group a, Nat n) => Vector n a -> Vector n a -> Vector n a
-translate = (+)
-
-rotate :: (Nat n, Ring a) => Matrix n n a -> Vector n a -> Vector n a
-rotate vs = (transpose vs *>)
-
-rotateByAngle :: (Floating a, Ring a) => a -> Vector3 a -> Vector3 a -> Vector3 a
-rotateByAngle a (Cons x (Cons y (Cons z Nil))) = rotate (vector3
-  (vector3 (x * x * mc + c) (y * x * mc + z * s) (z * x * mc - y * s))
-  (vector3 (x * y * mc - z * s) (y * y * mc + c) (z * y * mc + x * s))
-  (vector3 (x * z * mc + y * s) (y * z * mc - x * s) (z * z * mc + c))) where
-    c = cos a
-    mc = 1 - c
-    s = sin a
-
-scale :: (Nat n, Ring a) => Vector n a -> Vector n a -> Vector n a
-scale = zipWith (*)
-
-uscale :: (Nat n, Ring a) => a -> Vector n a -> Vector n a
-uscale = (*>)
+updatePlayer input player = set position (Components lin ang) player where
+  lin = playerPosition (get keyState input) (get angPos player) (get linPos player)
+  ang = playerOrientation (get mouseLook input) (get angPos player)
 
 -- rayTraceBlocks :: Double -> Vector3 Double -> Vector3 Double -> Map (Vector3 Double) Block -> Maybe (Vector3 Double, RayTraceResult Vector3 Double)
 -- rayTraceBlocks maxDist pos dir grid = if null sorted || nearDist > maxDist then Nothing else Just (P.head sorted) where

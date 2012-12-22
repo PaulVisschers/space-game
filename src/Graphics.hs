@@ -12,6 +12,7 @@ import Foreign (newArray)
 import Data.Algebra
 import Data.Vector
 import Common
+import Data.Body
 import Data.Client
 import Data.IORef
 
@@ -61,6 +62,7 @@ initial = do
   textureFunction $= Blend
   
   texImage2D Nothing NoProxy 0 RGBA'(TextureSize2D 64 64) 0 (PixelData RGBA UnsignedByte textureData)
+  cursor $= None
 
 display :: IORef State -> DisplayCallback
 display stateRef = do
@@ -70,7 +72,7 @@ display stateRef = do
   case L.get playerKey state of
     Nothing -> return ()
     Just playerKey -> do
-      let playerPosition = L.get (position . spatial . key playerKey . players . scene) state
+      let playerPosition = L.get (position . key playerKey . players . scene) state
       --setView (L.get (position . spatial) newPlayer)
       setView playerPosition
 
@@ -127,11 +129,11 @@ reshape s@(Size w h) = do
   perspective 60 (fromIntegral w / fromIntegral h) 0.02 200
   matrixMode $= Modelview 0
 
-setView :: Combination -> IO ()
-setView comb = lookAt pos (pos + front) up where
-  pos = L.get linear comb
-  front = vz $ L.get angular comb
-  up = vy $ L.get angular comb
+setView :: Components -> IO ()
+setView comps = lookAt pos (pos + front) up where
+  pos = L.get linear comps
+  front = vz $ L.get angular comps
+  up = vy $ L.get angular comps
 
 renderBlock :: Vector3 Double -> IO ()
 renderBlock pos = preservingMatrix $ do

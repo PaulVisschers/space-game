@@ -11,13 +11,14 @@ import qualified Data.Time.Clock as Clock
 
 import Data.Vector
 import Data.Algebra
+import Data.Body
 
 newtype Key a = Key Int deriving (Eq, Ord, Enum, Show, Read)
 
 type DataStore a = Map.Map (Key a) a
 
 key :: Key a -> Map.Map (Key a) b :-> b
-key ix = lens (Map.! ix) (\x m -> Map.insert ix x m)
+key ix = lens (Map.! ix) (Map.insert ix)
 
 data ClientMessage = Connect | KeyDown WalkingKey | KeyUp WalkingKey | MouseLook (Vector2 Int) deriving (Show, Read)
 data ServerMessage = ConnectSuccess (Key Player) Scene | FullUpdate Scene deriving (Show, Read)
@@ -26,18 +27,7 @@ data WalkingKey = WalkForward | WalkBackward | WalkRight | WalkLeft | WalkUp | W
 
 -- * Data
 data Player = Player {
-  _spatial :: Spatial
-  } deriving (Show, Read)
-
-data Spatial = Spatial {
-  _position :: Combination,
-  _velocity :: Combination,
-  _acceleration :: Combination
-  } deriving (Show, Read)
-  
-data Combination = Combination {
-  _linear :: Vector3 Double,
-  _angular :: Vector3 (Vector3 Double)
+  _playerBody :: Body
   } deriving (Show, Read)
 
 data Scene = Scene {
@@ -46,13 +36,14 @@ data Scene = Scene {
 
 newScene = Scene Map.empty
 
-newPlayer = Player (Spatial startPos zeroComb zeroComb) where
-  zeroComb = Combination zero zero
-  startPos = Combination (vector3 0 0 (-2)) one
+newPlayer = Player (Body 0 startPos zeroComps zeroComps) where
+  zeroComps = Components zero zero
+  startPos = Components (vector3 0 0 (-2)) one
 
-$(mkLabels [''Player, ''Spatial, ''Combination, ''Scene])
+$(mkLabels [''Player, ''Scene])
 
-
+instance IsBody Player where
+  body = playerBody
 
 timeDiff :: Clock.UTCTime -> Clock.UTCTime -> Double
 timeDiff x y = fromRational $ toRational $ Clock.diffUTCTime x y

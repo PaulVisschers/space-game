@@ -20,11 +20,6 @@ import Graphics
 
 type Chan = Chan.Channel ServerMessage ClientMessage
 
--- main = do
-  -- chan <- Chan.connect "localhost" 3000
-  -- forever $ return ()
-  -- forever $ Chan.send Msg.Connect chan
-
 main = do
   chan <- Chan.connect "localhost" 3000
   Chan.send Msg.Connect chan
@@ -42,10 +37,13 @@ main = do
 
 centerMousePointer :: IO ()
 centerMousePointer = do
-  Size w h <- get windowSize
-  let mx = w `div` 2
-  let my = h `div` 2
+  (mx, my) <- getCenterOfScreen
   pointerPosition $= Position mx my
+
+getCenterOfScreen :: IO (GLint, GLint)
+getCenterOfScreen = do
+  Size w h <- get windowSize
+  return (w `div` 2, h `div` 2)
 
 keyboardMouse :: Chan -> KeyboardMouseCallback -- TODO: Use local state to limit number of messages
 keyboardMouse chan (Char '\ESC') Down _ _ = leaveMainLoop
@@ -66,9 +64,7 @@ keyMap = Map.fromList [
 
 motion :: Chan -> MotionCallback -- TODO: Maybe make compounded messages and only send them a couple of times a second.
 motion chan (Position x y) = do
-  Size w h <- get windowSize
-  let mx = w `div` 2
-  let my = h `div` 2
+  (mx, my) <- getCenterOfScreen
   when (x /= mx || y /= my) $ do
     pointerPosition $= Position mx my
     Chan.send (Msg.MouseLook (V.vector2 (fromIntegral (x - mx)) (fromIntegral (y - my)))) chan
