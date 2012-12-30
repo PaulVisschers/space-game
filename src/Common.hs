@@ -3,7 +3,8 @@ module Common where
 
 import Prelude hiding ((+), (-), (*), (/), negate, zipWith, repeat, any, all, minimum, maximum)
 
-import Data.Map as Map
+import Data.Map (Map)
+import qualified Data.Map as M
 import Data.Label
 import qualified Data.Time.Clock as Clock
 
@@ -14,10 +15,10 @@ import Data.BlockObject
 
 newtype Key a = Key Int deriving (Eq, Ord, Enum, Show, Read)
 
-type DataStore a = Map.Map (Key a) a
+type DataStore a = Map (Key a) a
 
-key :: Key a -> Map.Map (Key a) b :-> b
-key ix = lens (Map.! ix) (Map.insert ix)
+key :: Key a -> Map (Key a) b :-> b
+key ix = lens (M.! ix) (M.insert ix)
 
 data ClientMessage = Connect | KeyDown WalkingKey | KeyUp WalkingKey | MouseLook (Vector2 Int) deriving (Show, Read)
 data ServerMessage = ConnectSuccess (Key Player) Scene | FullUpdate Scene deriving (Show, Read)
@@ -35,7 +36,7 @@ data Scene = Scene {
   } deriving (Show, Read)
 
 newScene :: Scene
-newScene = Scene Map.empty (Map.singleton (Key 0) testBlockObject)
+newScene = Scene M.empty (M.singleton (Key 0) testBlockObject)
 
 newPlayer :: Player
 newPlayer = Player (Body 0 startPos zeroComps zeroComps) where

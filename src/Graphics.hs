@@ -64,7 +64,7 @@ initial = do
   textureFunction $= Blend
   
   texImage2D Nothing NoProxy 0 RGBA'(TextureSize2D 64 64) 0 (PixelData RGBA UnsignedByte textureData)
-  cursor $= None
+  --cursor $= None
 
 display :: IORef State -> DisplayCallback
 display stateRef = do
@@ -82,6 +82,8 @@ display stateRef = do
 
       let bos = L.get (blockObjects . scene) state
       renderBlockObjects bos
+
+      renderBlockObjectWireFrames playerPosition bos
 
       --let val = 2
       --renderBlock (vector3 val 0 0)
@@ -139,6 +141,35 @@ setView comps = lookAt pos (pos + front) up where
   pos = L.get linear comps
   front = vz $ L.get angular comps
   up = vy $ L.get angular comps
+
+renderBlockObjectWireFrames :: Components -> DataStore BlockObject -> IO ()
+renderBlockObjectWireFrames ray bos = do
+  let m = rayTraceBlockObjects ray bos
+  case m of
+    Nothing -> return ()
+    Just (k, removeCoord, placeCoord) -> preservingMatrix $ do
+      let blockObject = L.get (key k) bos
+      translate (L.get linPos blockObject)
+      rotate (L.get angPos blockObject)
+      uscale (L.get blockSize blockObject)
+
+      lighting $= Disabled
+      texture Texture2D $= Disabled
+
+      translate (vector3 0.5 0.5 0.5)
+
+      preservingMatrix $ do
+        color (vector3 1 0 0)
+        translate (fmap fromIntegral removeCoord)
+        renderObject Wireframe (Cube 1)
+
+      preservingMatrix $ do
+        color (vector3 0 1 0)
+        translate (fmap fromIntegral placeCoord)
+        renderObject Wireframe (Cube 1)
+
+      lighting $= Enabled
+      texture Texture2D $= Enabled
 
 renderBlockObjects :: DataStore BlockObject -> IO ()
 renderBlockObjects blockObjects = mapM_ renderBlockObject (M.elems blockObjects)
