@@ -23,6 +23,7 @@ import Control.Concurrent (threadDelay)
 import Data.Vector
 import Data.Algebra
 import Data.LinearAlgebra
+import Data.BlockObject
 import qualified Network.Channel.Server.Trans as Channel
 import qualified Network.Channel.Server as Test
 import Common
@@ -176,11 +177,3 @@ updatePlayer :: Input -> Player -> Player
 updatePlayer input player = set position (Components lin ang) player where
   lin = playerPosition (get keyState input) (get angPos player) (get linPos player)
   ang = playerOrientation (get mouseLook input) (get angPos player)
-
--- rayTraceBlocks :: Double -> Vector3 Double -> Vector3 Double -> Map (Vector3 Double) Block -> Maybe (Vector3 Double, RayTraceResult Vector3 Double)
--- rayTraceBlocks maxDist pos dir grid = if null sorted || nearDist > maxDist then Nothing else Just (P.head sorted) where
-  -- aabbs = M.mapWithKey (\k x -> Cons k (Cons (k + repeat one) Nil)) grid
-  -- rays = M.map (rayTraceAABB (uscale 5 pos) dir) aabbs
-  -- hits = M.toList (M.filter isHit rays)
-  -- sorted = sortBy (P.compare `on` \(_, Hit (dist, _) _) -> dist) hits
-  -- (_, Hit (nearDist, _) _) = P.head sorted

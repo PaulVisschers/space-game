@@ -17,6 +17,7 @@ data State = State {
   _scene :: Scene
   }
 
+newState :: UTCTime -> State
 newState now = State Map.empty (newTime now) newScene
 
 data Input = Input {
@@ -24,6 +25,7 @@ data Input = Input {
   _mouseLook :: Vector2 Int
   }
 
+newInput :: Input
 newInput = Input Set.empty zero
 
 data Time = Time {
@@ -32,6 +34,7 @@ data Time = Time {
   _difference :: Double -- Seconds between this and previous tick.
 }
 
+newTime :: UTCTime -> Time
 newTime now = Time now now 0
 
 $(mkLabels [''State, ''Input, ''Time])

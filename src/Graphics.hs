@@ -4,8 +4,9 @@ module Graphics where
 import Prelude hiding (Num (..), Fractional (..), (.), id)
 import Control.Category
 import qualified Data.Label as L
+import Data.Map as M
 
-import Graphics.UI.GLUT hiding (lookAt, translate, vertex, normal, color, texCoord, scale, Vector2, Vector3, position)
+import Graphics.UI.GLUT hiding (lookAt, translate, vertex, normal, color, texCoord, scale, Vector2, Vector3, position, rotate)
 import qualified Graphics.UI.GLUT as GL
 import Foreign (newArray)
 
@@ -15,6 +16,7 @@ import Common
 import Data.Body
 import Data.Client
 import Data.IORef
+import Data.BlockObject
 
 initial :: IO ()
 initial = do
@@ -78,13 +80,16 @@ display stateRef = do
 
       drawAxes
 
-      let val = 2
-      renderBlock (vector3 val 0 0)
-      renderBlock (vector3 (-val) 0 0)
-      renderBlock (vector3 0 val 0)
-      renderBlock (vector3 0 (-val) 0)
-      renderBlock (vector3 0 0 val)
-      renderBlock (vector3 0 0 (-val))
+      let bos = L.get (blockObjects . scene) state
+      renderBlockObjects bos
+
+      --let val = 2
+      --renderBlock (vector3 val 0 0)
+      --renderBlock (vector3 (-val) 0 0)
+      --renderBlock (vector3 0 val 0)
+      --renderBlock (vector3 0 (-val) 0)
+      --renderBlock (vector3 0 0 val)
+      --renderBlock (vector3 0 0 (-val))
       --grid <- get (scene ! Grid)
       --renderGrid grid
       {-
@@ -135,10 +140,20 @@ setView comps = lookAt pos (pos + front) up where
   front = vz $ L.get angular comps
   up = vy $ L.get angular comps
 
-renderBlock :: Vector3 Double -> IO ()
-renderBlock pos = preservingMatrix $ do
-  uscale 0.2
-  translate pos
+renderBlockObjects :: DataStore BlockObject -> IO ()
+renderBlockObjects blockObjects = mapM_ renderBlockObject (M.elems blockObjects)
+
+renderBlockObject :: BlockObject -> IO ()
+renderBlockObject blockObject = preservingMatrix $ do
+  translate (L.get linPos blockObject)
+  rotate (L.get angPos blockObject)
+  uscale (L.get blockSize blockObject)
+  let bs = M.assocs (L.get blocks blockObject)
+  mapM_ (uncurry renderBlock) bs
+
+renderBlock :: Vector3 Int -> Block -> IO ()
+renderBlock pos block = preservingMatrix $ do
+  translate (fmap fromIntegral pos)
   renderPrimitive TriangleStrip $ do
     -- Front
     normal (vector3 0 0 (-1))
@@ -255,3 +270,15 @@ scale (Cons x (Cons y (Cons z Nil))) = GL.scale x y z
 
 uscale :: Double -> IO ()
 uscale x = GL.scale x x x
+
+rotate :: Vector3 (Vector3 Double) -> IO ()
+rotate (Cons (Cons xx (Cons xy (Cons xz Nil))) (Cons (Cons yx (Cons yy (Cons yz Nil))) (Cons (Cons zx (Cons zy (Cons zz Nil))) Nil))) = do
+  m <- newMatrix GL.ColumnMajor [
+    xx, yx, zx, 0,
+    xy, yy, zy, 0,
+    xz, yz, zz, 0,
+    0, 0, 0, 1]
+  multMatrix (m :: GLmatrix GLdouble)
+
+rotateByAngle :: Double -> Vector3 Double -> IO ()
+rotateByAngle a = GL.rotate a . convert3 GL.Vector3

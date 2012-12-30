@@ -6,9 +6,7 @@ import Prelude hiding (Num (..), (/), zipWith)
 import Data.Algebra
 import Data.Vector
 
-type Angle = Double
-
-degrees :: Angle -> Angle
+degrees :: Double -> Double
 degrees x = x / pi * 180
 
 translate :: (Group a, Nat n) => Vector n a -> Vector n a -> Vector n a

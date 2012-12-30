@@ -2,16 +2,15 @@
 module Common where
 
 import Prelude hiding ((+), (-), (*), (/), negate, zipWith, repeat, any, all, minimum, maximum)
-import Data.Foldable as Foldable
 
 import Data.Map as Map
-import Data.Set as Set
 import Data.Label
 import qualified Data.Time.Clock as Clock
 
 import Data.Vector
 import Data.Algebra
 import Data.Body
+import Data.BlockObject
 
 newtype Key a = Key Int deriving (Eq, Ord, Enum, Show, Read)
 
@@ -31,11 +30,14 @@ data Player = Player {
   } deriving (Show, Read)
 
 data Scene = Scene {
-  _players :: DataStore Player
+  _players :: DataStore Player,
+  _blockObjects :: DataStore BlockObject
   } deriving (Show, Read)
 
-newScene = Scene Map.empty
+newScene :: Scene
+newScene = Scene Map.empty (Map.singleton (Key 0) testBlockObject)
 
+newPlayer :: Player
 newPlayer = Player (Body 0 startPos zeroComps zeroComps) where
   zeroComps = Components zero zero
   startPos = Components (vector3 0 0 (-2)) one
