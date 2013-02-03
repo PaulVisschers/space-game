@@ -6,22 +6,20 @@ import Prelude hiding ((+), (-), (*), (/), negate, zipWith, repeat, any, all, mi
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Label
-import qualified Data.Time.Clock as Clock
+import Data.Time.Clock (UTCTime, diffUTCTime)
 
 import Data.Vector
 import Data.Algebra
 import Data.Body
 import Data.BlockObject
 
-newtype Key a = Key Int deriving (Eq, Ord, Enum, Show, Read)
+newtype Ref a = Ref Int deriving (Eq, Ord, Enum, Show, Read)
 
-type DataStore a = Map (Key a) a
+item :: Ref a -> Map (Ref a) b :-> b
+item ix = lens (M.! ix) (M.insert ix)
 
-key :: Key a -> Map (Key a) b :-> b
-key ix = lens (M.! ix) (M.insert ix)
-
-data ClientMessage = Connect | KeyDown WalkingKey | KeyUp WalkingKey | MouseLook (Vector2 Int) deriving (Show, Read)
-data ServerMessage = ConnectSuccess (Key Player) Scene | FullUpdate Scene deriving (Show, Read)
+data ClientMessage = Connect | InputChanges UserInput deriving (Show, Read)
+data ServerMessage = ConnectSuccess (Ref Player) Scene | FullUpdate Scene deriving (Show, Read)
 
 data WalkingKey = WalkForward | WalkBackward | WalkRight | WalkLeft | WalkUp | WalkDown deriving (Eq, Ord, Show, Read)
 
@@ -31,22 +29,45 @@ data Player = Player {
   } deriving (Show, Read)
 
 data Scene = Scene {
-  _players :: DataStore Player,
-  _blockObjects :: DataStore BlockObject
+  _players :: Map (Ref Player) Player,
+  _blockObjects :: Map (Ref BlockObject) BlockObject
   } deriving (Show, Read)
 
 newScene :: Scene
-newScene = Scene M.empty (M.singleton (Key 0) testBlockObject)
+newScene = Scene M.empty (M.singleton (Ref 0) testBlockObject)
 
 newPlayer :: Player
 newPlayer = Player (Body 0 startPos zeroComps zeroComps) where
   zeroComps = Components zero zero
   startPos = Components (vector3 0 0 (-2)) one
 
-$(mkLabels [''Player, ''Scene])
+--data TickUserInput = TickUserInput {
+--  _tickStartTime :: UTCTime,
+--  _tickDuration :: Duration,
+--  _keyChanges :: [KeyChange],
+--  _mouseMovements :: [MouseMovement]
+--  _inputChanges :: [(Offset, InputChange)]
+--  } deriving (Show, Read)
+
+type TickId = Int
+type Offset = Double -- In microseconds (TODO: Verify that this is in microseconds)
+type Duration = Double -- In microseconds (TODO: Verify that this is in microseconds)
+
+data UserInput = UserInput {
+  _tickId :: Int,
+  _tickDuration :: Duration,
+  _mouseMovement :: Vector2 Int,
+  _keyChanges :: [KeyChange]
+} deriving (Show, Read)
+
+data KeyChange = KeyChange Offset KeyState WalkingKey deriving (Show, Read)
+data KeyState = KeyUp | KeyDown deriving (Show, Read)
+
+$(mkLabels [''Player, ''Scene, ''UserInput])
+
 
 instance IsBody Player where
   body = playerBody
 
-timeDiff :: Clock.UTCTime -> Clock.UTCTime -> Double
-timeDiff x y = fromRational $ toRational $ Clock.diffUTCTime x y
+diffTime :: UTCTime -> UTCTime -> Duration
+diffTime x y = fromRational $ toRational $ diffUTCTime x y -- result is x - y

@@ -15,7 +15,7 @@ import Data.Vector
 import Common
 import Data.Body
 import Data.Client
-import Data.IORef
+import Control.Concurrent.MVar (MVar, readMVar)
 import Data.BlockObject
 
 initial :: IO ()
@@ -66,15 +66,15 @@ initial = do
   texImage2D Nothing NoProxy 0 RGBA'(TextureSize2D 64 64) 0 (PixelData RGBA UnsignedByte textureData)
   --cursor $= None
 
-display :: IORef State -> DisplayCallback
+display :: MVar State -> DisplayCallback
 display stateRef = do
   clear [ColorBuffer, DepthBuffer]
   loadIdentity
-  state <- get stateRef
-  case L.get playerKey state of
+  state <- readMVar stateRef
+  case L.get playerRef state of
     Nothing -> return ()
-    Just playerKey -> do
-      let playerPosition = L.get (position . key playerKey . players . scene) state
+    Just playerRef -> do
+      let playerPosition = L.get (position . item playerRef . players . scene) state
       --setView (L.get (position . spatial) newPlayer)
       setView playerPosition
 
@@ -142,13 +142,13 @@ setView comps = lookAt pos (pos + front) up where
   front = vz $ L.get angular comps
   up = vy $ L.get angular comps
 
-renderBlockObjectWireFrames :: Components -> DataStore BlockObject -> IO ()
+renderBlockObjectWireFrames :: Components -> Map (Ref BlockObject) BlockObject -> IO ()
 renderBlockObjectWireFrames ray bos = do
   let m = rayTraceBlockObjects ray bos
   case m of
     Nothing -> return ()
-    Just (k, removeCoord, placeCoord) -> preservingMatrix $ do
-      let blockObject = L.get (key k) bos
+    Just (ref, removeCoord, placeCoord) -> preservingMatrix $ do
+      let blockObject = L.get (item ref) bos
       translate (L.get linPos blockObject)
       rotate (L.get angPos blockObject)
       uscale (L.get blockSize blockObject)
@@ -171,7 +171,7 @@ renderBlockObjectWireFrames ray bos = do
       lighting $= Enabled
       texture Texture2D $= Enabled
 
-renderBlockObjects :: DataStore BlockObject -> IO ()
+renderBlockObjects :: Map (Ref BlockObject) BlockObject -> IO ()
 renderBlockObjects blockObjects = mapM_ renderBlockObject (M.elems blockObjects)
 
 renderBlockObject :: BlockObject -> IO ()

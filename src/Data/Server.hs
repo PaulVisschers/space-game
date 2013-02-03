@@ -12,7 +12,7 @@ import Data.Vector (Vector2)
 import Common
 
 data State = State {
-  _inputs :: Map (Key Player) Input,
+  _inputs :: Map (Ref Player) Input,
   _time :: Time,
   _scene :: Scene
   }
@@ -21,12 +21,12 @@ newState :: UTCTime -> State
 newState now = State Map.empty (newTime now) newScene
 
 data Input = Input {
-  _keyState :: Set WalkingKey,
+  _keyState :: Map WalkingKey Double,
   _mouseLook :: Vector2 Int
   }
 
 newInput :: Input
-newInput = Input Set.empty zero
+newInput = Input Map.empty zero
 
 data Time = Time {
   _currentTick :: UTCTime,

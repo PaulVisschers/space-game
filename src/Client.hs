@@ -1,58 +1,98 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Client where
 
-import Prelude hiding ((.), id)
+import Prelude hiding ((.), id, Num (..))
 import Control.Category
 import qualified Data.Label as L
+import Data.Label.PureM
 
 import Control.Monad
 import qualified Graphics.UI.GLUT as GL
-import Graphics.UI.GLUT
+import Graphics.UI.GLUT hiding (KeyState, KeyUp, KeyDown)
 import qualified Data.Map as Map
-import Data.IORef
+import qualified Data.Set as Set
+import Control.Concurrent.MVar
+import Data.Time.Clock (UTCTime, getCurrentTime)
+import Control.Monad.Reader
+import Control.Monad.State (StateT, runStateT)
+import qualified Control.Monad.State.Class as State
 
 import qualified Data.Vector as V
-import qualified Network.Channel.Client as Chan
+import Data.Algebra
+import Network.Channel.Client.Trans
 import Common as Msg
 import Common as Data
 import Data.Client
 import Graphics
 
-type Chan = Chan.Channel ServerMessage ClientMessage
+type ClientMonad a = StateT State (ReaderT (Channel ServerMessage ClientMessage) IO) a
+
+wrapCallback :: Channel ServerMessage ClientMessage -> MVar State -> ClientMonad a -> IO a
+wrapCallback chan stateVar callback = do
+  state <- takeMVar stateVar
+  (x, s) <- withChannel chan (runStateT callback state)
+  putMVar stateVar s
+  return x
+
+wrapCallback1 :: Channel ServerMessage ClientMessage -> MVar State -> (a -> ClientMonad b) -> a -> IO b
+wrapCallback1 chan stateVar callback val = do
+  state <- takeMVar stateVar
+  (x, s) <- withChannel chan (runStateT (callback val) state)
+  putMVar stateVar s
+  return x
+
+wrapCallback4 :: Channel ServerMessage ClientMessage -> MVar State -> (a -> b -> c -> d -> ClientMonad e) -> a -> b -> c -> d -> IO e
+wrapCallback4 chan stateVar callback val1 val2 val3 val4 = do
+  state <- takeMVar stateVar
+  (x, s) <- withChannel chan (runStateT (callback val1 val2 val3 val4) state)
+  putMVar stateVar s
+  return x
 
 main = do
-  chan <- Chan.connect "localhost" 3000
-  Chan.send Msg.Connect chan
-  stateRef <- newIORef (State Nothing newScene)
+  chan <- connect "localhost" 3000
+  withChannel chan (send Msg.Connect)
+  now <- getCurrentTime
+  stateVar <- newMVar (State Nothing 0 now zero [] [] Set.empty newScene)
   initial
   centerMousePointer
   reshapeCallback $= Just reshape
-  keyboardMouseCallback $= Just (keyboardMouse chan)
-  motionCallback $= Just (motion chan)
-  passiveMotionCallback $= Just (motion chan)
-  idleCallback $= Just (idle chan stateRef)
-  displayCallback $= display stateRef
+  keyboardMouseCallback $= Just (wrapCallback4 chan stateVar keyboardMouse)
+  motionCallback $= Just (wrapCallback1 chan stateVar motion)
+  passiveMotionCallback $= Just (wrapCallback1 chan stateVar motion)
+  idleCallback $= Just (wrapCallback chan stateVar idle)
+  displayCallback $= display stateVar
   mainLoop
-  Chan.close chan
+  close chan
 
-centerMousePointer :: IO ()
+centerMousePointer :: MonadIO m => m ()
 centerMousePointer = do
   (mx, my) <- getCenterOfScreen
-  pointerPosition $= Position mx my
+  liftIO (pointerPosition $= Position mx my)
 
-getCenterOfScreen :: IO (GLint, GLint)
+getCenterOfScreen :: MonadIO m => m (GLint, GLint)
 getCenterOfScreen = do
-  Size w h <- get windowSize
+  Size w h <- liftIO (get windowSize)
   return (w `div` 2, h `div` 2)
 
-keyboardMouse :: Chan -> KeyboardMouseCallback -- TODO: Use local state to limit number of messages
-keyboardMouse chan (Char '\ESC') Down _ _ = leaveMainLoop
-keyboardMouse chan key keyState _ _ = case Map.lookup key keyMap of
+keyboardMouse :: Key -> GL.KeyState -> Modifiers -> Position -> ClientMonad ()
+keyboardMouse (Char '\ESC') Down _ _ = liftIO leaveMainLoop
+keyboardMouse key keyState _ _ = case Map.lookup key keyMap of
   Nothing -> return ()
-  Just k -> case keyState of
-    Down -> Chan.send (Msg.KeyDown k) chan
-    Up -> Chan.send (Msg.KeyUp k) chan
+  Just k -> do
+    now <- liftIO getCurrentTime
+    tickStart <- gets currentTickStartTime
+    let offset = diffTime now tickStart
+    
+    keys <- gets pressedKeys
 
+    when (keyState == Down && not (Set.member k keys)) $ do
+      pressedKeys =. Set.insert k
+      currentTickKeyChanges =. (KeyChange offset KeyDown k :)
+    when (keyState == Up && Set.member k keys) $ do
+      pressedKeys =. Set.delete k
+      currentTickKeyChanges =. (KeyChange offset KeyUp k :)
+
+keyMap :: Map.Map Key WalkingKey
 keyMap = Map.fromList [
   (Char 'w', WalkForward),
   (Char 's', WalkBackward),
@@ -62,30 +102,43 @@ keyMap = Map.fromList [
   (Char 'c', WalkDown)
   ]
 
-motion :: Chan -> MotionCallback -- TODO: Maybe make compounded messages and only send them a couple of times a second.
-motion chan (Position x y) = do
+motion :: Position -> ClientMonad ()
+motion (Position x y) = do
   (mx, my) <- getCenterOfScreen
   when (x /= mx || y /= my) $ do
-    pointerPosition $= Position mx my
-    Chan.send (Msg.MouseLook (V.vector2 (fromIntegral (x - mx)) (fromIntegral (y - my)))) chan
+    liftIO (pointerPosition $= Position mx my)
+    currentTickMouseMovement =. (+ V.vector2 (fromIntegral (x - mx)) (fromIntegral (y - my)))
 
-idle :: Chan -> IORef State -> IdleCallback
-idle chan stateRef = do
-  processMessages chan stateRef
-  postRedisplay Nothing
+idle :: ClientMonad ()
+idle = do
+  -- Gather user input for this tick and bundle it.
+  now <- liftIO getCurrentTime
+  tickStart <- gets currentTickStartTime
+  let duration = diffTime now tickStart
 
-processMessages :: Chan -> IORef State -> IO ()
-processMessages chan stateRef = do
-  st <- get stateRef
-  msgs <- Chan.receive chan
-  stateRef $= foldl (flip processMessage) st msgs  
+  idNum <- gets nextTickId
+  mouse <- gets currentTickMouseMovement
+  keys <- gets currentTickKeyChanges
 
-processMessage :: ServerMessage -> State -> State
-processMessage (ConnectSuccess key sc) _ = State (Just key) sc
-processMessage (FullUpdate sc) st = L.set scene sc st
+  let userInput = UserInput idNum duration mouse keys
+  liftIO (putStrLn ("Sending: " ++ show userInput))
+  send (InputChanges userInput)
+
+  nextTickId =. (+ 1)
+  currentTickStartTime =: now
+  currentTickMouseMovement =: zero
+  currentTickKeyChanges =: []
+  userInputs =. (userInput :)
   
+  -- Process messages received from server.
+  msgs <- receive
+  mapM_ processMessage msgs
 
-centerMouse :: IO ()
-centerMouse = do
-  (Size w h) <- get windowSize
-  pointerPosition $= Position (w `div` 2) (h `div` 2)
+  liftIO (postRedisplay Nothing)
+
+processMessage :: ServerMessage -> ClientMonad ()
+processMessage (ConnectSuccess key sc) = do
+  playerRef =: Just key
+  scene =: sc
+processMessage (FullUpdate sc) = do
+  scene =: sc
