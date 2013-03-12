@@ -1,15 +1,13 @@
 {-# LANGUAGE GADTs #-}
 module Control.RayTrace where
 
-import Prelude hiding (negate, (-), (/), minimum, maximum, any, all)
 import Data.Foldable
-
-import Data.Algebra
-import Data.Vector
+import Data.LinearAlgebra (DivisionRing, IsNat, Vector (Cons, Nil), Vector2, (-), (/), negate, one, zero, zipWith5)
+import Prelude (Bool(True, False), Eq, Ord, Show, (==), (||), (<), (<=), (>), ($), (.), fmap, fst, otherwise, unzip)
 
 data RayTraceResult f a = Miss | Inside | Hit (a, f a) (a, f a) deriving (Eq, Ord, Show)
 
-rayTraceAABB :: (DivisionRing a, Nat n, Ord a) => Vector n a -> Vector n a -> Vector2 (Vector n a) -> RayTraceResult (Vector n) a
+rayTraceAABB :: (DivisionRing a, IsNat n, Ord a) => Vector n a -> Vector n a -> Vector2 (Vector n a) -> RayTraceResult (Vector n) a
 rayTraceAABB pos dir (Cons low (Cons high Nil))
   | any (== Miss) dims = Miss
   | all (== Inside) dims = Inside

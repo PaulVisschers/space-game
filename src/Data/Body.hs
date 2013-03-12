@@ -58,8 +58,8 @@ angAcc :: IsBody a => a :-> Vector3 (Vector3 Double)
 angAcc = angular . acceleration
 
 updateBody :: IsBody a => Double -> a -> a
-updateBody dt x = set linPos lp . set linVel lv . set angPos ap . set angVel av $ x where
-  lp = get linPos x + dt *> lv
-  lv = get linVel x + dt *> get linAcc x
+updateBody dt x = set linPos lp . set linVel lv $ x where -- . set angPos ap . set angVel av $ x where
+  lp = get linPos x + dt * lv
+  lv = get linVel x + dt * get linAcc x
   ap = fmap (rotate av) (get angPos x)
   av = fmap (rotate (get angAcc x)) (get angVel x)

@@ -12,21 +12,12 @@ import Data.Vector (Vector2)
 import Common
 
 data State = State {
-  _inputs :: Map (Ref Player) Input,
   _time :: Time,
-  _scene :: Scene
+  _serverScene :: Scene
   }
 
 newState :: UTCTime -> State
-newState now = State Map.empty (newTime now) newScene
-
-data Input = Input {
-  _keyState :: Map WalkingKey Double,
-  _mouseLook :: Vector2 Int
-  }
-
-newInput :: Input
-newInput = Input Map.empty zero
+newState now = State (newTime now) newScene
 
 data Time = Time {
   _currentTick :: UTCTime,
@@ -37,4 +28,7 @@ data Time = Time {
 newTime :: UTCTime -> Time
 newTime now = Time now now 0
 
-$(mkLabels [''State, ''Input, ''Time])
+$(mkLabels [''State, ''Time])
+
+instance GameState State where
+  scene = serverScene

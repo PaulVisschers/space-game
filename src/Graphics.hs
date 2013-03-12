@@ -10,8 +10,7 @@ import Graphics.UI.GLUT hiding (lookAt, translate, vertex, normal, color, texCoo
 import qualified Graphics.UI.GLUT as GL
 import Foreign (newArray)
 
-import Data.Algebra
-import Data.Vector
+import Data.LinearAlgebra hiding ((++), rotate, translate, uscale,)
 import Common
 import Data.Body
 import Data.Client
@@ -77,6 +76,8 @@ display stateRef = do
       let playerPosition = L.get (position . item playerRef . players . scene) state
       --setView (L.get (position . spatial) newPlayer)
       setView playerPosition
+      --putStrLn ("setting view to " ++ show (L.get linear playerPosition))
+      --putStrLn ""
 
       drawAxes
 

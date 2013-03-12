@@ -49,9 +49,9 @@ tick = do
   processMessages
 
   -- Update state from previous tick to new one
-  ins <- gets inputs
-  players . scene =. updatePlayers ins
-  inputs =. Map.map (set mouseLook zero)
+  --ins <- gets inputs
+  --players . scene =. updatePlayers ins
+  --inputs =. Map.map (set mouseLook zero)
 
   -- Send new scene state to everyone
   sc <- gets scene
@@ -62,48 +62,29 @@ tick = do
 processMessages :: ServerMonad ()
 processMessages = do
   msgs <- messagesToList `fmap` Channel.receiveAll
---  mapM_ (uncurry processMessage) msgs
+  --liftIO (print msgs)
+  mapM_ (uncurry processMessage) msgs
   return ()
 
---processMessage :: Ref Player -> ClientMessage -> ServerMonad ()
---processMessage playerRef msg = case msg of
---  Connect -> do
---    item playerRef . players . scene =: newPlayer
---    item playerRef . inputs =: newInput
---    sc <- gets scene
---    Channel.send playerRef (ConnectSuccess playerRef sc)
---  KeyDown k -> keyState . item playerRef . inputs =. Map.insert k 
---  KeyUp k -> keyState . item playerRef . inputs =. Set.delete k
---  MouseLook v -> mouseLook . item playerRef . inputs =. (+ v)
+processMessage :: Ref Player -> ClientMessage -> ServerMonad ()
+processMessage ref msg = case msg of
+  Connect -> do
+    player ref =: newPlayer
+    playerKeys ref =: Set.empty
+    sc <- gets scene
+    Channel.send ref (ConnectSuccess ref sc)
+  Ping _ _ -> return () -- TODO: Actually process this.
+--  KeyDown k -> keyState . item ref . inputs =. Map.insert k 
+--  KeyUp k -> keyState . item ref . inputs =. Set.delete k
+--  MouseLook v -> mouseLook . item ref . inputs =. (+ v)
 
 messagesToList :: Map k [a] -> [(k, a)]
 messagesToList = concatMap (\(k, xs) -> map (k,) xs) . Map.assocs
 
-playerPosition :: Set WalkingKey -> Vector3 (Vector3 Double) -> Vector3 Double -> Vector3 Double
-playerPosition keys dir pos = pos + lv where
-  up = vector3 0 1 0
-  right = vx dir
-  front = cross right up
-  lv = rotate (vector3 right up front) (fmap (* 0.002) $ normalize $ Set.foldr (\x y -> movementFromKey x + y) zero keys)
+--updatePlayers :: Map (Ref Player) Input -> Map (Ref Player) Player -> Map (Ref Player) Player
+--updatePlayers inputs = Map.mapWithKey (\k p -> updatePlayer (inputs Map.! k) p)
 
-playerOrientation :: Vector2 Int -> Vector3 (Vector3 Double) -> Vector3 (Vector3 Double)
-playerOrientation mouse dir = if vy (vy rotatedY) >= 0 then fmap rotX rotatedY else fmap rotX dir where
-  rotX = rotateByAngle (fromIntegral (vx mouse) * (-0.001)) (vector3 0 1 0)
-  rotY = rotateByAngle (fromIntegral (vy mouse) * 0.001) (vx dir)
-  rotatedY = fmap rotY dir
-
-movementFromKey :: WalkingKey -> Vector3 Double
-movementFromKey WalkLeft = vector3 1 0 0
-movementFromKey WalkRight = vector3 (-1) 0 0
-movementFromKey WalkDown = vector3 0 (-1) 0
-movementFromKey WalkUp = vector3 0 1 0
-movementFromKey WalkBackward = vector3 0 0 (-1)
-movementFromKey WalkForward = vector3 0 0 1
-
-updatePlayers :: Map (Ref Player) Input -> Map (Ref Player) Player -> Map (Ref Player) Player
-updatePlayers inputs = Map.mapWithKey (\k p -> updatePlayer (inputs Map.! k) p)
-
-updatePlayer :: Input -> Player -> Player
-updatePlayer input player = set position (Components lin ang) player where
-  lin = playerPosition (Map.keysSet $ get keyState input) (get angPos player) (get linPos player)
-  ang = playerOrientation (get mouseLook input) (get angPos player)
+--updatePlayer :: Input -> Player -> Player
+--updatePlayer input player = set position (Components lin ang) player where
+--  lin = playerPosition (Map.keysSet $ get keyState input) (get angPos player) (get linPos player)
+--  ang = playerOrientation (get mouseLook input) (get angPos player)

@@ -1,20 +1,17 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Data.BlockObject where
 
-import Prelude hiding (Num (..), repeat)
-
-import Data.Map (Map)
-import qualified Data.Map as M
-import Data.Algebra
-import Data.Vector (Vector3, vector2, vector3, vz, repeat, transpose)
-import Data.Label
+import Control.RayTrace (RayTraceResult(Hit), isHit, rayTraceAABB)
+import Data.Body (Body (Body), Components (Components), IsBody, body, position)
 import Data.Function (on)
+import Data.Label (get, mkLabels)
 import Data.List (sortBy)
+import Data.Map (Map)
 import Data.Maybe (fromJust, isJust)
+import Data.LinearAlgebra (Vector3, (+), (/), negate, one, pi, repeat, rotate, rotateByAngle, translate, uscale, vector2, vector3, vz, zero)
+import Prelude (Double, Eq, Int, Maybe (Just, Nothing), Ord, Read, Show, ($), (.), compare, fmap, fromIntegral, round)
 
-import Control.RayTrace
-import Data.Body
-import Data.LinearAlgebra
+import qualified Data.Map as M
 
 data Block = TestBlock deriving (Eq, Ord, Show, Read)
 
@@ -32,7 +29,7 @@ testBlockObject = BlockObject 0.2 (M.fromList [
   (vector3 0 0 2, TestBlock)
   ]) (Body 0 startPos zeroComps zeroComps) where
     zeroComps = Components zero zero
-    startPos = Components (vector3 3 2 1) (fmap (rotateByAngle (pi Prelude./ 8) (vector3 0 0 1)) one)
+    startPos = Components (vector3 3 2 1) (fmap (rotateByAngle (pi / 8) (vector3 0 0 1)) one)
 
 instance IsBody BlockObject where
   body = blockObjectBody
@@ -64,5 +61,5 @@ relateTo :: BlockObject -> Components -> Components
 relateTo bo (Components lin1 ang1) = Components lin1' ang1' where
   Components lin2 ang2 = get position bo
   size = get blockSize bo
-  lin1' = uscale (1 Prelude./ size) . rotate ang2 . translate (negate lin2) $ lin1
+  lin1' = uscale (1 / size) . rotate ang2 . translate (negate lin2) $ lin1
   ang1' = fmap (rotate ang2) ang1
