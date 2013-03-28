@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module Server where
 
-import Prelude hiding (id, (.), (+), (-), (*), (/), negate, zipWith, repeat, any, all, minimum, maximum, foldl)
+import Prelude hiding (id, (.), (+), (-), (*), (/), negate, zipWith, repeat, any, all, minimum, maximum, foldl, recip)
 import Data.Foldable hiding (mapM_, concatMap)
 import Control.Category
 import Data.Map (Map)
@@ -56,6 +56,10 @@ tick = do
   -- Send new scene state to everyone
   sc <- gets scene
   Channel.broadcast (FullUpdate sc)
+
+  now2 <- liftIO getCurrentTime
+  let val = round ((recip 60 - diffTime now2 now) *. 1000000)
+  liftIO (threadDelay val)
 
   return ()
 

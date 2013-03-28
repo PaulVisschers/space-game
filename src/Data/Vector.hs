@@ -2,8 +2,11 @@
 module Data.Vector where
 
 import Control.Applicative(Applicative, (<$>), (<*>), pure)
-import Data.Foldable (Foldable, foldr)
+import Control.Monad (liftM)
+import Data.Binary (Binary, get, put)
+import Data.Foldable (Foldable, foldr, toList)
 import Data.Traversable(Traversable, traverse)
+import GHC.Generics (Generic)
 import Prelude (Bool(True), Eq, Functor, Ord, Ordering(EQ), (==), (&&), (>), ($), (.), compare, fmap, id, return)
 import Text.Read (Read, Lexeme(Ident), lexP, parens, prec, readPrec, step)
 import Text.Show (Show, showParen, showsPrec, showString)
@@ -76,6 +79,10 @@ instance Traversable (Vector n) where
   traverse f Nil = pure Nil
   traverse f (Cons x xs) = Cons <$> f x <*> traverse f xs
 
+instance (Binary a, IsNat n) => Binary (Vector n a) where
+  put = put . toList
+  get = liftM fromList get
+
 snoc :: a -> Vector n a -> Vector (Succ n) a
 snoc x Nil = Cons x Nil
 snoc x (Cons y v) = Cons y (snoc x v)
@@ -109,6 +116,13 @@ repeat = unfoldr (\x -> (x,x))
 
 iterate :: IsNat n => (a -> a) -> a -> Vector n a
 iterate f = unfoldr (\x -> (x, f x))
+
+fromList :: IsNat n => [a] -> Vector n a
+fromList = fromList' unit where
+  fromList' :: Natural n -> [a] -> Vector n a
+  fromList' NZero [] = Nil
+  fromList' (NSucc n) (x : xs) = Cons x (fromList' n xs)
+  fromList' _ _ = error "fromList: converting to vector failed because list is not of the correct length."
 
 apply :: Vector n (a -> b) -> Vector n a -> Vector n b
 apply Nil Nil = Nil

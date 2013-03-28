@@ -10,6 +10,7 @@ import Graphics.UI.GLUT hiding (lookAt, translate, vertex, normal, color, texCoo
 import qualified Graphics.UI.GLUT as GL
 import Foreign (newArray)
 
+import Data.IORef
 import Data.LinearAlgebra hiding ((++), rotate, translate, uscale,)
 import Common
 import Data.Body
@@ -70,63 +71,61 @@ display stateRef = do
   clear [ColorBuffer, DepthBuffer]
   loadIdentity
   state <- readMVar stateRef
-  case L.get playerRef state of
-    Nothing -> return ()
-    Just playerRef -> do
-      let playerPosition = L.get (position . item playerRef . players . scene) state
-      --setView (L.get (position . spatial) newPlayer)
-      setView playerPosition
-      --putStrLn ("setting view to " ++ show (L.get linear playerPosition))
-      --putStrLn ""
+  let ref = L.get playerRef state
+  let playerPosition = L.get (position . item ref . players . scene) state
+  --setView (L.get (position . spatial) newPlayer)
+  setView playerPosition
+  --putStrLn ("setting view to " ++ show (L.get linear playerPosition))
+  --putStrLn ""
 
-      drawAxes
+  drawAxes
 
-      let bos = L.get (blockObjects . scene) state
-      renderBlockObjects bos
+  let bos = L.get (blockObjects . scene) state
+  renderBlockObjects bos
 
-      renderBlockObjectWireFrames playerPosition bos
+  renderBlockObjectWireFrames playerPosition bos
 
-      --let val = 2
-      --renderBlock (vector3 val 0 0)
-      --renderBlock (vector3 (-val) 0 0)
-      --renderBlock (vector3 0 val 0)
-      --renderBlock (vector3 0 (-val) 0)
-      --renderBlock (vector3 0 0 val)
-      --renderBlock (vector3 0 0 (-val))
-      --grid <- get (scene ! Grid)
-      --renderGrid grid
-      {-
-      -- Debug wireframe at placement location
-      --pos <- get (scene ! Player ! Position)
-      --dir <- get (scene ! Player ! Orientation)
+  --let val = 2
+  --renderBlock (vector3 val 0 0)
+  --renderBlock (vector3 (-val) 0 0)
+  --renderBlock (vector3 0 val 0)
+  --renderBlock (vector3 0 (-val) 0)
+  --renderBlock (vector3 0 0 val)
+  --renderBlock (vector3 0 0 (-val))
+  --grid <- get (scene ! Grid)
+  --renderGrid grid
+  {-
+  -- Debug wireframe at placement location
+  --pos <- get (scene ! Player ! Position)
+  --dir <- get (scene ! Player ! Orientation)
 
-      --view <- get (scene ! Player ! ViewLocation)
-      --placement <- get (scene ! Player ! PlacementLocation)
+  --view <- get (scene ! Player ! ViewLocation)
+  --placement <- get (scene ! Player ! PlacementLocation)
 
-      when (isJust view) $ do
-        preservingMatrix $ do
-          uscale 0.2
-          translate (fromJust view)
-          color (vector3 1 0 0)
-          lighting $= Disabled
-          texture Texture2D $= Disabled
-          translate (vector3 0.5 0.5 0.5)
-          renderObject Wireframe (Cube 1)
-          lighting $= Enabled
-          texture Texture2D $= Enabled
-      preservingMatrix $ do
-        uscale 0.2
-        translate placement
-        color (vector3 0 1 0)
-        lighting $= Disabled
-        texture Texture2D $= Disabled
-        translate (vector3 0.5 0.5 0.5)
-        renderObject Wireframe (Cube 1)
-        lighting $= Enabled
-        texture Texture2D $= Enabled
-      -}
+  when (isJust view) $ do
+    preservingMatrix $ do
+      uscale 0.2
+      translate (fromJust view)
+      color (vector3 1 0 0)
+      lighting $= Disabled
+      texture Texture2D $= Disabled
+      translate (vector3 0.5 0.5 0.5)
+      renderObject Wireframe (Cube 1)
+      lighting $= Enabled
+      texture Texture2D $= Enabled
+  preservingMatrix $ do
+    uscale 0.2
+    translate placement
+    color (vector3 0 1 0)
+    lighting $= Disabled
+    texture Texture2D $= Disabled
+    translate (vector3 0.5 0.5 0.5)
+    renderObject Wireframe (Cube 1)
+    lighting $= Enabled
+    texture Texture2D $= Enabled
+  -}
 
-      GL.position (Light 0) $= Vertex4 0 0 0 1
+  GL.position (Light 0) $= Vertex4 0 0 0 1
   swapBuffers
 
 reshape :: ReshapeCallback

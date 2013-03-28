@@ -6,6 +6,8 @@ import Control.Category
 import qualified Data.Label as L
 import Data.Label
 
+import Data.List (foldl')
+import Data.IORef
 import Control.Monad
 import qualified Graphics.UI.GLUT as GL
 import Graphics.UI.GLUT hiding (KeyState, KeyUp, KeyDown, get, set)
@@ -22,43 +24,19 @@ import qualified Control.Monad.State.Class as State
 import qualified Data.Vector as V
 import Data.Vector (vector2)
 import Data.Algebra
---import Network.Channel.Client.Trans as Chan
-import Network.Channel.Client
+import Network.Channel
 import Common as Msg
 import Common as Data
 import Data.Client
 import Graphics
 import Data.Body as Body
 
-type ClientMonad a = StateT State (ReaderT (Channel ServerMessage ClientMessage) IO) a
-
---wrapCallback :: Channel ServerMessage ClientMessage -> MVar State -> ClientMonad a -> IO a
---wrapCallback chan stateVar callback = do
---  state <- takeMVar stateVar
---  (x, s) <- withChannel chan (runStateT callback state)
---  putMVar stateVar s
---  return x
-
---wrapCallback1 :: Channel ServerMessage ClientMessage -> MVar State -> (a -> ClientMonad b) -> a -> IO b
---wrapCallback1 chan stateVar callback val = do
---  state <- takeMVar stateVar
---  (x, s) <- withChannel chan (runStateT (callback val) state)
---  putMVar stateVar s
---  return x
-
---wrapCallback4 :: Channel ServerMessage ClientMessage -> MVar State -> (a -> b -> c -> d -> ClientMonad e) -> a -> b -> c -> d -> IO e
---wrapCallback4 chan stateVar callback val1 val2 val3 val4 = do
---  state <- takeMVar stateVar
---  (x, s) <- withChannel chan (runStateT (callback val1 val2 val3 val4) state)
---  putMVar stateVar s
---  return x
-
-main = do
+main = withSockets $ do
   chan <- connect "localhost" 3000
-  --send Connect chan
+  send chan Connect
   now <- getCurrentTime
   let sc = set (player (Ref 1)) newPlayer . set (playerKeys (Ref 1)) S.empty $ newScene 
-  stateVar <- newMVar (State (Just (Ref 1)) sc sc 0)
+  stateVar <- newMVar (State (Ref 1) sc 0)
   inputVar <- newMVar (0, now, [])
   keyVar <- newMVar S.empty
   initial
@@ -70,7 +48,6 @@ main = do
   idleCallback $= Just (idle chan inputVar stateVar)
   displayCallback $= display stateVar
   mainLoop
-  close chan
 
 centerMousePointer :: MonadIO m => m ()
 centerMousePointer = do
@@ -82,24 +59,21 @@ getCenterOfScreen = do
   Size w h <- liftIO (GL.get windowSize)
   return (w `div` 2, h `div` 2)
 
---keyboardMouse :: Key -> GL.KeyState -> Modifiers -> Position -> ClientMonad ()
---keyboardMouse (Char '\ESC') Down _ _ = liftIO leaveMainLoop
---keyboardMouse key keyState _ _ = case Map.lookup key keyMap of
---  Nothing -> return ()
---  Just k -> do
---    now <- liftIO getCurrentTime
---    lastKeyPress <- gets currentTickLastKeyPress
---    let duration = diffTime now lastKeyPress
---    currentTickLastKeyPress =: now
-    
---    keys <- gets currentTickPressedKeys
+data Input = Input {
+  inputId ::Id,
+  inputTimeDelta :: TimeDelta,
+  inputChange :: InputChange
+  } deriving (Show, Read)
 
---    when (keyState == Down && not (Set.member k keys)) $ do
---      currentTickPressedKeys =. Set.insert k
---      currentTickKeyChanges =. (KeyChange duration KeyDown k :)
---    when (keyState == Up && Set.member k keys) $ do
---      currentTickPressedKeys =. Set.delete k
---      currentTickKeyChanges =. (KeyChange duration KeyUp k :)
+queueInput :: Channel i ClientMessage -> MVar (Id, UTCTime, [Input]) -> InputChange -> IO ()
+queueInput chan inputVar change = do
+  now <- getCurrentTime
+  (prevId, prevTime, inputs) <- takeMVar inputVar
+  let newId = succ prevId
+  putMVar inputVar (newId, now, Input newId (diffTime now prevTime) change : inputs)
+  when (diffTime now prevTime > 0.04) $ do
+    print (Input newId (diffTime now prevTime) change)
+  send chan (Ping newId change)
 
 keyboardMouse :: Channel i ClientMessage -> MVar (Id, UTCTime, [Input]) -> MVar (Set WalkingKey) -> KeyboardMouseCallback
 keyboardMouse _ _ _ (Char '\ESC') Down _ _ = leaveMainLoop
@@ -117,7 +91,6 @@ keyboardMouse chan inputVar keyVar key keyState _ _ = case M.lookup key keyMap o
       _ -> do
         putMVar keyVar keys
 
-
 keyMap :: Map Key WalkingKey
 keyMap = M.fromList [
   (Char 'w', WalkForward),
@@ -128,15 +101,6 @@ keyMap = M.fromList [
   (Char 'c', WalkDown)
   ]
 
---motion :: Position -> ClientMonad ()
---motion (Position x y) = do
---  (mx, my) <- getCenterOfScreen
---  when (x /= mx || y /= my) $ do
---    liftIO (pointerPosition $= Position mx my)
---    currentTickMouseMovement =. (+ V.vector2 (fromIntegral (x - mx)) (fromIntegral (y - my)))
-
-data Input = Input Id TimeDelta InputChange deriving (Show, Read)
-
 motion :: Channel i ClientMessage -> MVar (Id, UTCTime, [Input]) -> MotionCallback
 motion chan inputVar (Position x y) = do
   (mx, my) <- getCenterOfScreen
@@ -145,64 +109,24 @@ motion chan inputVar (Position x y) = do
     let v = vector2 (fromIntegral (x - mx)) (fromIntegral (y - my))
     queueInput chan inputVar (MouseChange v)
 
-queueInput :: Channel i ClientMessage -> MVar (Id, UTCTime, [Input]) -> InputChange -> IO ()
-queueInput chan inputVar change = do
-  now <- getCurrentTime
-  (prevId, prevTime, inputs) <- takeMVar inputVar
-  let newId = succ prevId
-  putMVar inputVar (newId, now, Input newId (diffTime now prevTime) change : inputs)
-  putStrLn ("Queueing " ++ show (Input newId (diffTime now prevTime) change))
-  send (Ping newId change) chan
-
-
 testScene = set (player (Ref 1)) newPlayer . set (playerKeys (Ref 1)) S.empty $ newScene 
 
 idle :: Channel ServerMessage ClientMessage -> MVar (Id, UTCTime, [Input]) -> MVar State -> IdleCallback
 idle chan inputVar stateVar = do
+  -- Send idle message to server.
   queueInput chan inputVar NoChange
 
-  --State mref csc ssc sid <- readMVar stateVar
-  (_, _ , inputs) <- readMVar inputVar
+  -- Calculate new scene.
+  State ref sc sid <- takeMVar stateVar
+  (iid, time, inputs) <- takeMVar inputVar
 
-  --print mref
-  let csc' = processInputs (Ref 1) inputs testScene
-  --writeFile "log" (show csc')
-  --seq csc' (return ())
+  let inputs' = takeWhile (\i -> inputId i > sid) inputs
+  let sc' = processInputs ref inputs' sc
+  let sid' = if null inputs' then sid else inputId (head inputs')
 
-  --State mref csc ssc sid <- takeMVar stateVar
-  --case mref of
-  --  Nothing -> putMVar stateVar (State mref csc' ssc sid)
-  --  Just ref -> putMVar stateVar (State mref csc' ssc sid) --putMVar stateVar (State mref (processInputs ref inputs ssc) ssc sid)
-  
-  --print csc
-  ---- Gather user input for this tick and bundle it.
-  --now <- liftIO getCurrentTime
-  --tickStart <- gets currentTickStartTime
-  --let duration = diffTime now tickStart
+  putMVar inputVar (iid, time, inputs)
+  putMVar stateVar (State ref sc' sid')
 
-  --idNum <- gets nextTickId
-  --mouse <- gets currentTickMouseMovement
-  --keys <- gets currentTickKeyChanges
-
-  --let userInput = UserInput idNum duration mouse keys
-  --liftIO (putStrLn ("Sending: " ++ show userInput))
-  ----send (ClientUpdate userInput)
-
-  --ref <- gets playerRef
-  --case ref of
-  --  Nothing -> return ()
-  --  Just ref -> do
-  --    processUserInput ref userInput
-  --    --p <- gets (Body.linPos . player ref)
-  --    --liftIO (print p)
-
-  --nextTickId =. (+ 1)
-  --currentTickStartTime =: now
-  --currentTickLastKeyPress =: now
-  --currentTickMouseMovement =: zero
-  --currentTickKeyChanges =: []
-  ----userInputs =. (userInput :)
-  
   -- Process messages received from server.
   --msgs <- receive chan
   --mapM_ (processMessage stateVar) msgs
@@ -210,9 +134,9 @@ idle chan inputVar stateVar = do
   postRedisplay Nothing
 
 processMessage :: MVar State -> ServerMessage -> IO ()
-processMessage stateVar (ConnectSuccess key sc) = do
+processMessage stateVar (ConnectSuccess ref sc) = do
   _ <- takeMVar stateVar
-  putMVar stateVar (State (Just key) sc sc 0)
+  putMVar stateVar (State ref sc 0)
 processMessage stateVar (FullUpdate sc) = do
   --scene =: sc
   return ()
@@ -229,4 +153,4 @@ processInputChange :: Ref Player -> InputChange -> Scene -> Scene
 processInputChange ref NoChange sc = sc
 processInputChange ref (KeyChange KeyDown key) sc = modify (playerKeys ref) (S.insert key) sc
 processInputChange ref (KeyChange KeyUp key) sc = modify (playerKeys ref) (S.delete key) sc
-processInputChange ref (MouseChange v) sc = sc -- modify (angPos . player ref) (playerOrientation v) sc -- NOTE: playerOrientation does not take turning speed of a player into account (and name is confusing).
+processInputChange ref (MouseChange v) sc = modify (player ref) (turnPlayer v) sc
