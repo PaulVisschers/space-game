@@ -7,7 +7,7 @@ import Data.Binary (Binary, get, put)
 import Data.Foldable (Foldable, foldr, toList)
 import Data.Traversable(Traversable, traverse)
 import GHC.Generics (Generic)
-import Prelude (Bool(True), Eq, Functor, Ord, Ordering(EQ), (==), (&&), (>), ($), (.), compare, fmap, id, return)
+import Prelude (Bool(True), Eq, Functor, Ord, Ordering(EQ), (==), (&&), (>), ($), (.), compare, error, fmap, id, return)
 import Text.Read (Read, Lexeme(Ident), lexP, parens, prec, readPrec, step)
 import Text.Show (Show, showParen, showsPrec, showString)
 
